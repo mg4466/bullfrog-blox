@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Isometric stack of cubes: the game's board, reduced to an icon. -->
+  <rect width="128" height="128" rx="20" fill="#0b0b18"/>
+  <g stroke="#0b0b18" stroke-width="2">
+    <!-- bottom row -->
+    <g fill="#f2c94c">
+      <path d="M20 96l18-10 18 10-18 10z"/>
+      <path d="M56 96l18-10 18 10-18 10z"/>
+      <path d="M92 96l18-10 18 10-18 10z"/>
+    </g>
+    <g fill="#b8962f">
+      <path d="M20 96v12l18 10v-12z"/>
+      <path d="M56 96v12l18 10v-12z"/>
+      <path d="M92 96v12l18 10v-12z"/>
+    </g>
+    <!-- middle row -->
+    <g fill="#4b3f9e">
+      <path d="M38 78l18-10 18 10-18 10z"/>
+      <path d="M74 78l18-10 18 10-18 10z"/>
+    </g>
+    <g fill="#332c72">
+      <path d="M38 78v12l18 10v-12z"/>
+      <path d="M74 78v12l18 10v-12z"/>
+    </g>
+    <!-- top cube -->
+    <g fill="#e8722a">
+      <path d="M56 60l18-10 18 10-18 10z"/>
+    </g>
+    <g fill="#a84a15">
+      <path d="M56 60v12l18 10v-12z"/>
+    </g>
+  </g>
+</svg>
