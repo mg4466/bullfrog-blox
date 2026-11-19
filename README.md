@@ -97,6 +97,10 @@ godot --headless --path . --script res://tests/test_logic.gd
 # Every hop key and the start key, sent as real input events.
 godot --headless --path . res://tests/controls.tscn
 
+# Contact: hopping onto a ball squashes it, a ball landing on the frog kills it,
+# and a ball landing on the cube the frog just left does not.
+godot --headless --path . res://tests/collisions.tscn
+
 # Boots the real game, plays it with an autopilot until a round is cleared,
 # then dies on purpose until game over and checks that restarting is clean.
 godot --headless --path . res://tests/playthrough.tscn --fixed-fps 60 --quit-after 8000

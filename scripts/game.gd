@@ -745,8 +745,15 @@ func _player_falls() -> void:
 # Death, respawn, game over
 # ---------------------------------------------------------------------------
 
+## Resolves whoever shares the cube the frog just landed on.
+##
+## Note there is deliberately no `_player_busy` guard here: this runs from the
+## landing callback, which always fires *before* `_player_busy` is cleared, so
+## such a guard would make every contact a no-op (that was a real bug, and
+## tests/collisions.tscn exists because of it). The "frog is in the air" case is
+## handled where it belongs: in _on_enemy_landed(), which is the enemy moving.
 func _check_player_collision() -> void:
-	if _phase != Phase.PLAYING or _player_busy:
+	if _phase != Phase.PLAYING:
 		return
 	for enemy in _enemies.duplicate():
 		var e := enemy as HopEnemy

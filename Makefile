@@ -16,6 +16,7 @@ run: import
 test: import
 	$(GODOT) --headless $(PROJECT) --script res://tests/test_logic.gd
 	$(GODOT) --headless $(PROJECT) res://tests/controls.tscn
+	$(GODOT) --headless $(PROJECT) res://tests/collisions.tscn
 	$(GODOT) --headless $(PROJECT) res://tests/playthrough.tscn --fixed-fps 60 --quit-after 9000
 
 screenshots: import
