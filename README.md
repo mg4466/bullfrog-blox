@@ -1,8 +1,9 @@
-# Voxel Q*bert
+# Bullfrog Blox
 
-A Q*bert clone written from scratch in Godot 4: 28 cubes, four diagonal hops,
-red balls, a snake that hunts you down, and two spinning discs that carry you
-back to the top.
+A voxel arcade hopper written from scratch in Godot 4, in the tradition of the
+1982 classic *Q*bert*: a very large bullfrog paints a 28-cube pyramid by hopping
+across it, while red balls, a green nuisance and a snake that hunts it down try
+to knock it off. Two spinning discs carry it back to the top.
 
 Every model is a voxel grid built in code, every sound is a square wave
 generated at startup, and there is not a single imported model, texture or audio
@@ -10,14 +11,19 @@ file in the repository — it is source only.
 
 ![The board mid-round](docs/board.png)
 
+The cast, left to right: the bullfrog, a red ball, Coily's egg, the snake, and an
+escape disc (all built from code, all in `scripts/voxel_models.gd`):
+
+![The cast](docs/cast.png)
+
 ## Play
 
 Requires [Godot 4.7](https://godotengine.org/download) (a plain install is
 enough; no .NET build, no plugins).
 
 ```bash
-git clone https://github.com/mg4466/qbert-voxel.git
-cd qbert-voxel
+git clone https://github.com/mg4466/bullfrog-blox.git
+cd bullfrog-blox
 godot --headless --import     # once: builds Godot's script class cache
 godot --path .
 ```
@@ -74,7 +80,7 @@ Hop on every cube to paint it the target colour before the enemies get you.
 | Kill Coily with a disc | 500 |
 | Clear a round | 1000 + 250 per level |
 
-The high score is saved to the Godot user directory (`user://voxel_qbert.cfg`).
+The high score is saved to the Godot user directory (`user://bullfrog_blox.cfg`).
 
 ## Tests
 

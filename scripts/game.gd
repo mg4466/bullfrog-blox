@@ -1,6 +1,6 @@
 extends Node3D
 
-## Voxel Q*bert - the conductor of the whole game.
+## Bullfrog Blox - the conductor of the whole game.
 ##
 ## This node is the only place that knows everything at once: the board, the
 ## player, the enemies, the score and the phase of play. Everything else is
@@ -31,7 +31,7 @@ const ENEMY_HOP_TIME := 0.30
 ## body's top face plus the cap's lip; the constant is duplicated rather than
 ## referenced so this file parses without the global class cache.
 const TILE_TOP := 0.50
-const SAVE_PATH := "user://voxel_qbert.cfg"
+const SAVE_PATH := "user://bullfrog_blox.cfg"
 
 var _phase: int = Phase.READY
 var _level: int = 1
@@ -53,7 +53,7 @@ var _entity_root: Node3D
 ## rows); the camera sits on the (1,1) diagonal, so without this rotation the
 ## rows would run across the screen at 45 degrees and the pyramid would lean.
 ## Rotating the stage by 45 degrees turns the x axis into pure screen-horizontal
-## and the z axis into pure screen-depth - the classic Q*bert framing - without
+## and the z axis into pure screen-depth - the classic arcade framing - without
 ## touching a single coordinate in Board.
 var _stage: Node3D
 var _player: Player
@@ -102,7 +102,7 @@ func _enter_ready() -> void:
 	_lives = 3
 	_build_level()
 	_hud.set_stats(_score, _level, _lives, _high)
-	_hud.show_banner("VOXEL Q*BERT", "SPACE to start")
+	_hud.show_banner("BULLFROG BLOX", "SPACE to start")
 
 
 ## Static scene dressing. The board and the characters are built later, per
@@ -133,7 +133,7 @@ func _build_world() -> void:
 	_add_ground_plate()
 	_add_dust()
 
-	# Orthographic camera on the classic Q*bert diagonal: equal x/z puts the
+	# Orthographic camera on the classic isometric diagonal: equal x/z puts the
 	# camera on a 45-degree azimuth, and y is chosen so it looks down at 30
 	# degrees (x/z distance is 12*sqrt(2), so y = that * tan(30)).
 	#

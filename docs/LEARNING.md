@@ -1,4 +1,4 @@
-# A guided tour of Voxel Q*bert
+# A guided tour of Bullfrog Blox
 
 This is the "why", not the "what". The code is commented file by file; this
 document is for reading end to end, ideally with `scripts/game.gd` open in
@@ -12,7 +12,7 @@ here was solved in the rule layer, where a headless test could check it.
 
 ## 1. The board is a plane of coordinates, not a grid of tiles
 
-Q*bert's pyramid looks like 28 cubes arranged in a triangle. The tempting model
+The board looks like 28 cubes arranged in a triangle. The tempting model
 is a 2D array: row 0 has 7 cubes, row 1 has 6, and so on. The problem starts the
 moment you need to ask "what is one hop down-left from here?" — in a ragged 2D
 array that question has a different answer on every row, and the edge cases
@@ -262,7 +262,7 @@ findable with a pixel sample instead of an opinion.
 **Colour was being destroyed by a plane that should not have existed.** A large
 additive "ground glow" plane sat under the board to ground it. At this camera
 angle the plane's near edge is *closer than the board*, so it blended violet
-over the entire frame — orange characters came out pink. The giveaway was a
+over the entire frame — the green frog came out pink. The giveaway was a
 measurement: an unshaded material set to `(1.0, 0.5, 0.1)` rendered as
 `#ffaeb0`. Hiding one node fixed it. The glow now lives in the sky shader, which
 is infinitely far away and therefore can only ever be behind things.
@@ -271,9 +271,10 @@ is infinitely far away and therefore can only ever be behind things.
 turning into flat `#848d9b`. In an orthographic scene everything is at the same
 depth, so fog adds no depth cue at all — it just washes the image. It is off.
 
-**Physically-lit characters lose their palette.** An orange voxel lit by a warm
-key plus a blue fill comes out beige: the red channel clips first, the tonemapper
-desaturates the highlight, and the character stops reading as "orange". The cast
+**Physically-lit characters lose their palette.** A saturated voxel lit by a
+warm key plus a blue fill comes out beige: the strongest channel clips first, the
+tonemapper desaturates the highlight, and the character stops reading as its own
+colour. The cast
 is now *unshaded* with the lighting baked into the vertex colours (the
 `shade` factors in `VoxelBuilder`), which is also how a lot of stylised voxel art
 is made. They still cast shadows into the world, so they sit in the scene even
@@ -298,4 +299,4 @@ visible grain, no new shape information — so it is off on purpose.
   to match. The coordinate layer does not care; this is purely a mapping between
   keys and `Board.DIRECTIONS`.
 * **Export a build.** Add an `export_presets.cfg` for Linux/Windows and check
-  that `user://voxel_qbert.cfg` still lands somewhere writable.
+  that `user://bullfrog_blox.cfg` still lands somewhere writable.

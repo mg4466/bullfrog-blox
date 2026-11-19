@@ -1,7 +1,7 @@
 class_name Player
 extends Node3D
 
-## Q*bert: a voxel blob that faces the direction it last hopped.
+## The bullfrog: a voxel blob that faces the direction it last hopped.
 ##
 ## Movement itself is driven by game.gd, because only the game knows whether a
 ## hop ends on a cube, on a disc, or in the void. This node owns presentation:

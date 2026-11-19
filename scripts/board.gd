@@ -1,7 +1,7 @@
 class_name Board
 extends RefCounted
 
-## Pure, renderer-free rules for the Q*bert pyramid.
+## Pure, renderer-free rules for the pyramid.
 ##
 ## Everything in this file is a static function or a plain data question: which
 ## cubes exist, where a cube sits in the world, what a hop does to a cube, which
@@ -14,7 +14,7 @@ extends RefCounted
 ## Every cube is addressed by a Vector3i (x, y, z) with
 ##     x >= 0, y >= 0, z >= 0 and x + y + z == side - 1
 ## For the classic 7-row board that sum is 6, so there are 28 cubes: the plane
-## x+y+z=6 contains exactly the triangle of a Q*bert pyramid.
+## x+y+z=6 contains exactly the triangle of the board.
 ##
 ## Because the sum is constant, the four legal moves never leave the plane:
 ##     down-right (1, -1, 0)      down-left (0, -1, 1)

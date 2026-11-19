@@ -1,7 +1,7 @@
 class_name HopEnemy
 extends Node3D
 
-## The three things that want Q*bert dead, reduced to the differences that
+## The three things that want the frog dead, reduced to the differences that
 ## matter:
 ##
 ##   ball   hops downhill at random, harmless to the board, kills on contact

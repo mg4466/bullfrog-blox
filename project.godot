@@ -6,8 +6,8 @@ config_version=5
 
 [application]
 
-config/name="Voxel Q*bert"
-config/description="A voxel remake of Q*bert's pyramid: hop the cubes, dodge the snakes, ride the discs."
+config/name="Bullfrog Blox"
+config/description="A voxel arcade hopper: paint the pyramid, dodge the snakes, ride the discs."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"

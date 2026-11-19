@@ -26,7 +26,7 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	print("Voxel Q*bert - logic tests")
+	print("Bullfrog Blox - logic tests")
 	_test_pyramid()
 	_test_moves()
 	_test_projection()

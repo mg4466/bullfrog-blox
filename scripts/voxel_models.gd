@@ -23,16 +23,18 @@ extends RefCounted
 ## face), one cell is `CELL` world units. VoxelBuilder centres models in x/z and
 ## puts their feet on y = 0, so a node's position is "the point this stands on".
 
-const CELL := 0.10
+const CELL := 0.09
 const BALL_CELL := 0.14
 const DISC_CELL := 0.11
 
 # Palette. Named so a would-be modder can recolour the whole game from here.
-const BODY := Color("e8701f")        # Q*bert orange
-const HEAD := Color("ff9a3c")
-const NOSE := Color("d8571f")
-const EYE := Color("1a1626")
-const FOOT := Color("a83d12")
+const FROG := Color("6fae3f")        # bullfrog green
+const FROG_DARK := Color("4c7d2a")
+const BELLY := Color("d9e8a8")       # pale cream belly
+const MOUTH := Color("14200d")
+const SCLERA := Color("f2f4dc")
+const PUPIL := Color("14160f")
+const FOOT := Color("3f6a22")
 
 const BALL_RED := Color("e0402f")
 const BALL_HI := Color("ff8266")
@@ -67,12 +69,24 @@ static func _fill(grid: Dictionary, from: Vector3i, to: Vector3i, colour: Color)
 
 ## A ball of cells around `centre`, rounded by Euclidean distance.
 static func _sphere(grid: Dictionary, centre: Vector3i, radius: float, colour: Color) -> void:
-	var r := int(ceil(radius))
-	for x in range(-r, r + 1):
-		for y in range(-r, r + 1):
-			for z in range(-r, r + 1):
-				if Vector3(x, y, z).length() <= radius:
-					grid[centre + Vector3i(x, y, z)] = colour
+	_ellipsoid(grid, Vector3(centre), Vector3(radius, radius, radius), colour)
+
+
+## A stretched sphere: the frog is wide and low rather than round, and an
+## ellipsoid is the cheapest way to say that in a grid.
+static func _ellipsoid(grid: Dictionary, centre: Vector3, radii: Vector3, colour: Color) -> void:
+	var rx := int(ceil(radii.x))
+	var ry := int(ceil(radii.y))
+	var rz := int(ceil(radii.z))
+	for x in range(-rx, rx + 1):
+		for y in range(-ry, ry + 1):
+			for z in range(-rz, rz + 1):
+				var nx := float(x) / radii.x
+				var ny := float(y) / radii.y
+				var nz := float(z) / radii.z
+				if nx * nx + ny * ny + nz * nz <= 1.0:
+					grid[Vector3i(roundi(centre.x) + x, roundi(centre.y) + y,
+						roundi(centre.z) + z)] = colour
 
 
 ## Recolours one horizontal layer of a blob, so a ball catches light on top
@@ -85,32 +99,92 @@ static func _highlight_layer(grid: Dictionary, layer: int, colour: Color) -> voi
 
 # --- models ------------------------------------------------------------------
 
-## The player: an orange creature with a big snout, two eyes and two feet.
-## Seven cells across at 0.10 makes it 0.70 units wide - chunky on a 0.86 cube,
-## and round enough that the silhouette reads as a head rather than a box.
+## The player: a big, fat bullfrog.
+##
+## Nine cells across at 0.09 makes it 0.81 units wide on a 0.86 cube - as wide as
+## it can be without overhanging, which is the whole joke: this frog is too big
+## for the block it is standing on. Squat, a pale belly, a wide dark mouth, heavy
+## back feet, and two eyes mounded above the head so the silhouette survives the
+## fixed top-down camera.
+##
+## The body is an ellipsoid, then every feature is painted onto the *outermost*
+## cell of its column (_front_cell/_top_cell). Painting fixed coordinates is how
+## the first version ended up with its mouth buried inside the body: the surface
+## of a blob is not a straight line.
 static func player() -> ArrayMesh:
 	var grid := {}
-	_sphere(grid, Vector3i(3, 3, 3), 3.35, BODY)
+	_ellipsoid(grid, Vector3(4.0, 3.0, 3.0), Vector3(4.4, 3.0, 3.7), FROG)
 
-	# Flatten the underside so it sits on a cube instead of balancing on a point.
-	for cell in grid.keys():
-		if (cell as Vector3i).y < 1:
-			grid.erase(cell)
+	# Eyes first, so the mounds become part of the silhouette the mouth and belly
+	# get painted around.
+	for eye_x in [2, 6]:
+		# Socket mound, then a two-cell sclera bulging forward, then one pupil.
+		_fill(grid, Vector3i(eye_x, 5, 3), Vector3i(eye_x + 1, 6, 4), FROG_DARK)
+		_fill(grid, Vector3i(eye_x, 6, 5), Vector3i(eye_x + 1, 6, 6), SCLERA)
+		_put(grid, Vector3i(eye_x + 1, 6, 6), PUPIL)
 
-	# The upper third is lighter, which reads as a separate mass - a head.
-	for cell in grid.keys():
-		if (cell as Vector3i).y >= 5:
-			grid[cell] = HEAD
+	# Pale belly: paint the front of the lower half.
+	for x in range(0, 10):
+		for y in range(0, 3):
+			var cell := _front_cell(grid, x, y)
+			if cell.z > -900:
+				grid[cell] = BELLY
 
-	# Snout: two cells wide, two tall, sticking out of the front.
-	_fill(grid, Vector3i(2, 2, 6), Vector3i(3, 3, 6), NOSE)
-	# Eyes sit above the snout, on the front face.
-	_put(grid, Vector3i(1, 4, 6), EYE)
-	_put(grid, Vector3i(4, 4, 6), EYE)
-	# Feet, dark and slightly forward.
-	_put(grid, Vector3i(1, 1, 5), FOOT)
-	_put(grid, Vector3i(4, 1, 5), FOOT)
+	# Haunches: mass at the back corners, so it reads as a sitting frog with
+	# folded hind legs rather than a floating head.
+	for side in [0, 1, 8, 9]:
+		for y in range(1, 3):
+			var haunch := _back_cell(grid, side, y)
+			# The sentinel is +1000 for a column that does not exist; writing it
+			# would put a voxel 90 units behind the model (and the mesh bounds
+			# would stretch to match).
+			if haunch.z < 900:
+				grid[haunch] = FROG_DARK
+
+	# Wide mouth: a dark line across the front of the face, just below the eyes
+	# and two cells high at the corners so it curves like a frog's jaw.
+	for x in range(2, 8):
+		var mouth := _front_cell(grid, x, 3)
+		if mouth.z > -900:
+			grid[mouth] = MOUTH
+	for x in [2, 7]:
+		var corner := _front_cell(grid, x, 2)
+		if corner.z > -900:
+			grid[corner] = MOUTH
+
+	# Heavy back feet, painted on the front of the bottom row and kicked out one
+	# cell so they read as feet rather than as the underside of the body.
+	for x in [0, 1, 8, 9]:
+		var foot := _front_cell(grid, x, 0)
+		if foot.z > -900:
+			grid[foot] = FOOT
+			grid[foot + Vector3i(0, 0, 1)] = FOOT
+	# Nostrils, above the mouth.
+	for x in [3, 7]:
+		var nostril := _front_cell(grid, x, 5)
+		if nostril.z > -900:
+			grid[nostril] = FROG_DARK
 	return VoxelBuilder.build(grid, CELL)
+
+
+## The rearmost cell of the column (x, y), used to darken the frog's back.
+static func _back_cell(grid: Dictionary, x: int, y: int) -> Vector3i:
+	var best := Vector3i(x, y, 1000)
+	for cell in grid.keys():
+		var c: Vector3i = cell
+		if c.x == x and c.y == y and c.z < best.z:
+			best = c
+	return best
+
+
+## The frontmost cell of the column (x, y): what you actually see from the camera.
+static func _front_cell(grid: Dictionary, x: int, y: int) -> Vector3i:
+	var best := Vector3i(x, y, -1000)
+	for cell in grid.keys():
+		var c: Vector3i = cell
+		if c.x == x and c.y == y and c.z > best.z:
+			best = c
+	return best
 
 
 ## A red ball: five cells across with a lit top.
@@ -156,8 +230,8 @@ static func snake() -> ArrayMesh:
 	_fill(grid, Vector3i(0, 2, 2), Vector3i(2, 4, 4), SNAKE)
 	grid.erase(Vector3i(0, 4, 2))
 	grid.erase(Vector3i(2, 4, 2))
-	_put(grid, Vector3i(0, 3, 5), EYE)
-	_put(grid, Vector3i(2, 3, 5), EYE)
+	_put(grid, Vector3i(0, 3, 5), PUPIL)
+	_put(grid, Vector3i(2, 3, 5), PUPIL)
 	_fill(grid, Vector3i(0, 2, 5), Vector3i(2, 2, 5), SNAKE_BELLY)
 	# Body: alternating offsets along -z, so it coils without any rotation code.
 	_fill(grid, Vector3i(0, 1, 0), Vector3i(2, 2, 1), SNAKE_DARK)
