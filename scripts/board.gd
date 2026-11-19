@@ -48,9 +48,9 @@ const TILE_SPACING_Z := TILE_SPACING_X / 0.5
 ## (Color() is not allowed in a constant expression). Level 3 and beyond reuse
 ## the last row; more entries would mean more colours before a new rule kicks in.
 const LEVEL_COLORS := [
-	["4b3f9e", "f2c94c"],              # level 1: purple -> gold, one hop each
-	["1d3f73", "2f9e6f", "f2c94c"],    # level 2: blue -> green -> gold, two hops
-	["701a3c", "c9542e", "f2c94c"],    # level 3+: three states that wrap around
+	["6a4fe0", "ffc93c"],              # level 1: violet -> gold, one hop each
+	["2b6fd6", "35c48a", "ffc93c"],    # level 2: blue -> jade -> gold, two hops
+	["c2306b", "f06a3a", "ffc93c"],    # level 3+: three states that wrap around
 ]
 
 ## How many tiles the board has for a given number of rows.
@@ -59,8 +59,8 @@ static func tile_count(rows: int) -> int:
 
 
 ## Builds the pyramid: every coordinate with non-negative parts summing to
-## rows - 1. Returned in a deterministic order (apex first) so tests and the
-## level-clear animation can rely on it.
+## rows - 1. Returned in a deterministic order (base row first: y = 0, then
+## y = 1, ... up to the apex) so tests and the level-clear wave can rely on it.
 static func pyramid(rows: int) -> Array[Vector3i]:
 	var out: Array[Vector3i] = []
 	var total := rows - 1

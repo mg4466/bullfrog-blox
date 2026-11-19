@@ -46,6 +46,15 @@ func _ready() -> void:
 		_players.append(player)
 
 
+## Stop everything on the way out. A playing AudioStreamPlayer keeps its
+## AudioStreamPlaybackWAV alive inside the AudioServer, and Godot reports those
+## as leaked objects at exit if the app quits mid-blip (which it always does).
+func _exit_tree() -> void:
+	for player in _players:
+		player.stop()
+		player.stream = null
+
+
 func play(key: String) -> void:
 	if not SPECS.has(key):
 		return
@@ -82,11 +91,16 @@ func _render(freq: float, duration: float, volume: float, sweep: float, wave: St
 	var data := PackedByteArray()
 	data.resize(frames * 2)  # 16-bit mono: two bytes per frame
 
+	# Phase is accumulated, not recomputed from t * f(t). Recomputing while the
+	# frequency sweeps makes the *rate of change* of phase go as f0*(1 + 2k·p),
+	# so a downward sweep with k > -0.5 decelerates through zero and bends back
+	# up near the end. Accumulating keeps the sweep monotonic.
+	var phase := 0.0
 	for i in range(frames):
 		var t := float(i) / RATE
 		var progress := float(i) / float(frames)
 		var f := freq * lerpf(1.0, sweep, progress)
-		var phase := fmod(t * f, 1.0)
+		phase = fmod(phase + f / float(RATE), 1.0)
 		var sample := 0.0
 		match wave:
 			"square":

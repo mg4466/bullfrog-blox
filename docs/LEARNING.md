@@ -119,10 +119,21 @@ skip the face. That is the whole algorithm.
 
 Two details that are easy to get wrong:
 
-* **Winding.** Each quad is listed counter-clockwise as seen from outside. Godot
-  culls back faces, so a reversed winding makes a model disappear from some
-  angles and look inside-out from others. The corner indices in `FACE_DEFS` are
-  worth checking against a sketch once.
+* **Winding, and the index table.** This is the bug that shipped for an hour and
+  made every character look shredded. The corner indices are a bit field
+  (bit 0 = x, bit 1 = y, bit 2 = z), so index 2 is `(0,1,0)` — but the first
+  version of `FACE_DEFS` was written as if index 2 were `(1,1,0)`. Five of the
+  six quads were then not planar at all: they cut diagonally through the cube
+  and rendered as floating half-triangles. Two lessons: the table and the
+  packing must be defined next to each other (they are now, in one comment), and
+  **counting vertices is not a geometry test**. `tests/test_logic.gd` now checks
+  that every triangle's corners share an axis, that its stored normal matches
+  that axis, and that the winding matches what the renderer wants.
+* **Godot's winding runs the other way.** Godot treats *clockwise* triangles as
+  front faces when seen from outside, which is the opposite of the right-hand
+  rule used to write the table. Rather than write the table backwards, the
+  builder emits the reversed order at the single point where vertices are added.
+  Reverse it back and every model vanishes — the test above will say so.
 * **SurfaceTool has no implicit fan for `PRIMITIVE_TRIANGLES`.** A quad must be
   emitted as six vertices `(a, b, c, a, c, d)`. Emitting four and hoping for a
   fan produces half a model.
@@ -242,7 +253,39 @@ could be rewritten at speed without re-testing by hand.
 
 ---
 
-## 8. Exercises
+## 8. What the art pass taught
+
+The first playable build was dim, flat and purple-tinted. Fixing that turned out
+to be less about sliders than about three specific mistakes, all of which were
+findable with a pixel sample instead of an opinion.
+
+**Colour was being destroyed by a plane that should not have existed.** A large
+additive "ground glow" plane sat under the board to ground it. At this camera
+angle the plane's near edge is *closer than the board*, so it blended violet
+over the entire frame — orange characters came out pink. The giveaway was a
+measurement: an unshaded material set to `(1.0, 0.5, 0.1)` rendered as
+`#ffaeb0`. Hiding one node fixed it. The glow now lives in the sky shader, which
+is infinitely far away and therefore can only ever be behind things.
+
+**Fog was greying the sky.** The same measurement loop showed a violet gradient
+turning into flat `#848d9b`. In an orthographic scene everything is at the same
+depth, so fog adds no depth cue at all — it just washes the image. It is off.
+
+**Physically-lit characters lose their palette.** An orange voxel lit by a warm
+key plus a blue fill comes out beige: the red channel clips first, the tonemapper
+desaturates the highlight, and the character stops reading as "orange". The cast
+is now *unshaded* with the lighting baked into the vertex colours (the
+`shade` factors in `VoxelBuilder`), which is also how a lot of stylised voxel art
+is made. They still cast shadows into the world, so they sit in the scene even
+though they ignore its lights.
+
+The rest was conventional: a raking key light with real shadows, a cool rim, a
+ground plate to receive those shadows, glow above the bloom threshold for
+finished cubes, and a vignette. Worth knowing: SSAO raised the luminance
+standard deviation of a flat cube top from 0.002 to 0.014 at this camera angle —
+visible grain, no new shape information — so it is off on purpose.
+
+## 9. Exercises
 
 * **New board shape.** `Board.pyramid(rows)` is the only place that assumes a
   triangle. Try a hexagon (all coordinates with `max(x,y,z) <= 3` and a fixed

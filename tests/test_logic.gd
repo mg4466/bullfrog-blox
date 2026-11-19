@@ -17,6 +17,15 @@ var _failures := 0
 
 
 func _initialize() -> void:
+	# Godot resolves `class_name` types through a cache the editor (or
+	# --import) writes. Without it, VoxelModels arrives as a broken script and
+	# the model checks would "pass" by never running, which is worse than
+	# failing, so say what is wrong and stop.
+	if not FileAccess.file_exists("res://.godot/global_script_class_cache.cfg"):
+		printerr("No script class cache: run `godot --headless --import` once, then re-run.")
+		quit(1)
+		return
+
 	print("Voxel Q*bert - logic tests")
 	_test_pyramid()
 	_test_moves()
@@ -27,6 +36,7 @@ func _initialize() -> void:
 	_test_chase()
 	_test_discs()
 	_test_voxel_builder()
+	_test_face_geometry()
 	_test_voxel_models()
 
 	print("")
@@ -260,6 +270,79 @@ func _test_voxel_builder() -> void:
 	_check(is_equal_approx(bounds.position.z, -bounds.end.z), "voxel model is centred in z")
 
 	_check(BuilderScript.build({}, 1.0).get_surface_count() == 0, "empty model is empty")
+
+
+## The test that should have caught the worst bug in this project.
+##
+## The first version of the face table disagreed with the corner bit-packing, so
+## five of the six quads were not planar at all and the models rendered as
+## shredded, inside-out shells. Vertex *counts* were correct the whole time, which
+## is why the original checks passed. This one looks at the geometry:
+##   * every triangle's three corners share the coordinate it claims to be on,
+##   * its stored normal agrees with the axis its corners share,
+##   * and its winding is what Godot needs (see the note in VoxelBuilder).
+func _test_face_geometry() -> void:
+	print("- face geometry")
+	var mesh: ArrayMesh = BuilderScript.build({Vector3i(0, 0, 0): Color.WHITE}, 1.0)
+	var arrays := mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	_check(verts.size() == 36, "36 vertices for one cube")
+	_check(normals.size() == 36, "36 normals for one cube")
+
+	var planes := {}
+	var bad_plane := 0
+	var bad_normal := 0
+	var bad_winding := 0
+	for tri in range(0, verts.size(), 3):
+		var a := verts[tri]
+		var b := verts[tri + 1]
+		var c := verts[tri + 2]
+		var stored := normals[tri]
+
+		# The face must lie on one of the cube's six faces: its three corners
+		# share an axis at exactly +0.5 or -0.5 (the cube is centred, size 1).
+		var axis := -1
+		for i in range(3):
+			if is_equal_approx(a[i], b[i]) and is_equal_approx(b[i], c[i]):
+				axis = i
+		if axis == -1:
+			bad_plane += 1
+			continue
+		# x and z are centred on the origin; y is "floor at 0, top at 1", because
+		# VoxelBuilder puts a model's feet on y = 0 (see its docstring).
+		if axis == 1:
+			if not (is_equal_approx(a.y, 0.0) or is_equal_approx(a.y, 1.0)):
+				bad_plane += 1
+		elif not is_equal_approx(absf(a[axis]), 0.5):
+			bad_plane += 1
+		# Key faces by axis + which side, not by a corner: several faces share
+		# their first corner, which made this count read 4 instead of 6.
+		planes["%d:%.1f" % [axis, a[axis]]] = true
+
+		# Stored normal must be the axis normal pointing away from the cube.
+		var expected := Vector3.ZERO
+		if axis == 1:
+			expected.y = 1.0 if a.y > 0.5 else -1.0
+		else:
+			expected[axis] = signf(a[axis])
+		# Godot packs normals into the vertex buffer (octahedral), so they come
+		# back with ~1e-5 of noise; compare direction, not exact components.
+		if stored.normalized().dot(expected) < 0.999:
+			bad_normal += 1
+
+		# Godot treats clockwise triangles as front faces, so the geometric
+		# normal from the winding must point *into* the cube. The builder does
+		# this by emitting reversed quads; if someone "fixes" that, the models
+		# vanish and this check says why.
+		var geometric := (b - a).cross(c - a)
+		if geometric.length() < 0.0001 or geometric.normalized().dot(stored) > -0.5:
+			bad_winding += 1
+
+	_check(bad_plane == 0, "%d triangles are not on a cube face" % bad_plane)
+	_check(bad_normal == 0, "%d triangles have a normal that does not match their face" % bad_normal)
+	_check(bad_winding == 0, "%d triangles are wound backwards for Godot" % bad_winding)
+	_check(planes.size() == 6, "a single voxel emits 6 distinct faces, got %d" % planes.size())
 
 
 func _test_voxel_models() -> void:

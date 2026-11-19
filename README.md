@@ -4,9 +4,9 @@ A Q*bert clone written from scratch in Godot 4: 28 cubes, four diagonal hops,
 red balls, a snake that hunts you down, and two spinning discs that carry you
 back to the top.
 
-Every model in the game is a voxel grid built in code, and every sound is a
-square wave generated at startup. There are no imported models, textures or
-audio files — the repository is source only.
+Every model is a voxel grid built in code, every sound is a square wave
+generated at startup, and there is not a single imported model, texture or audio
+file in the repository — it is source only.
 
 ![The board mid-round](docs/board.png)
 
@@ -18,12 +18,20 @@ enough; no .NET build, no plugins).
 ```bash
 git clone https://github.com/mg4466/qbert-voxel.git
 cd qbert-voxel
+godot --headless --import     # once: builds Godot's script class cache
 godot --path .
 ```
 
+Or just `make run`, which does both.
+
 On Arch, `sudo pacman -S godot` works; otherwise drop the official Linux
 binary somewhere on your `PATH`. You can also open `project.godot` in the
-editor and press F5.
+editor and press F5 — the editor does the import for you.
+
+That `--import` step is a Godot requirement, not this project's: scripts that
+use `class_name` are resolved through a cache the editor normally writes. A
+fresh clone has no cache, so a plain `godot --path .` fails to compile until it
+has been imported once.
 
 ## Controls
 
@@ -73,9 +81,15 @@ The high score is saved to the Godot user directory (`user://voxel_qbert.cfg`).
 Two headless suites, both part of the repository:
 
 ```bash
-# 312 checks over the pure rules: pyramid shape, projections, state rules,
-# hop arcs, chase AI, voxel mesh geometry.
+# Everything, in order (this imports first):
+make test
+
+# 318 checks over the pure rules: pyramid shape, projections, state rules,
+# hop arcs, chase AI, voxel mesh geometry and winding.
 godot --headless --path . --script res://tests/test_logic.gd
+
+# Every hop key and the start key, sent as real input events.
+godot --headless --path . res://tests/controls.tscn
 
 # Boots the real game, plays it with an autopilot until a round is cleared,
 # then dies on purpose until game over and checks that restarting is clean.
@@ -98,9 +112,21 @@ bounds) so layout regressions can be checked numerically.
 | `scripts/tile.gd`, `player.gd`, `enemy.gd` | Presentation for each thing on the board |
 | `scripts/hud.gd`, `synth.gd` | Overlay and procedural sound |
 
-The full walkthrough — coordinate system, why the stage is rotated 45°,
-how the tests caught two real layout bugs — is in
-[docs/LEARNING.md](docs/LEARNING.md).
+### The look
+
+The scene is lit rather than painted: a warm key light rakes across the board and
+drops real shadows onto a ground plate, a cool rim separates the silhouettes, and
+finished cubes glow past the bloom threshold. The background is a shader gradient
+with a soft pool of light behind the pyramid, plus a vignette.
+
+The characters are deliberately *unshaded*: their lighting is baked into their
+vertex colours (top faces brightest, undersides darkest), so the palette stays
+exactly as authored instead of turning beige under a physically-correct key
+light. They still cast shadows into the world, which is what grounds them.
+
+The full walkthrough — coordinate system, why the stage is rotated 45°, why the
+voxel quads are wound the way they are, and how the tests caught the layout bugs —
+is in [docs/LEARNING.md](docs/LEARNING.md).
 
 ## Not implemented
 

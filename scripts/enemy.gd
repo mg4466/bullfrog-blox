@@ -41,7 +41,7 @@ func setup(enemy_kind: String, start_coord: Vector3i, hop_interval: float) -> vo
 
 	_model = MeshInstance3D.new()
 	_model.mesh = _mesh_for_kind()
-	_model.material_override = VoxelBuilder.make_material()
+	_model.material_override = VoxelBuilder.make_material(true)
 	add_child(_model)
 
 
@@ -88,6 +88,10 @@ func drop_in(to_position: Vector3, delay: float) -> void:
 func track_motion(tween: Tween) -> void:
 	if _motion_tween != null and _motion_tween.is_valid():
 		_motion_tween.kill()
+	# Also stop the drop-in: otherwise a squash during the 0.45 s arrival has two
+	# tweens writing `position` and the drop keeps flipping `visible` back on.
+	if _spawn_tween != null and _spawn_tween.is_valid():
+		_spawn_tween.kill()
 	_motion_tween = tween
 
 

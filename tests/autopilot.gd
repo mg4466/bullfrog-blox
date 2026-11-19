@@ -40,6 +40,9 @@ var _stage := 0
 var _stage_clock := 0.0
 var _drill_falls := 0
 var _restart_ok := false
+## Set once the report starts; it is a coroutine (it frees the game and waits a
+## frame), so _process must not keep poking a half-freed scene.
+var _finished := false
 
 const PLAY_SECONDS := 30.0
 
@@ -55,6 +58,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _finished:
+		return
 	_clock += delta
 	_stage_clock += delta
 
@@ -182,6 +187,7 @@ func _verify_restart() -> void:
 # --- report ------------------------------------------------------------------
 
 func _report() -> void:
+	_finished = true
 	print("autopilot: %.1fs simulated, %d hops requested" % [_clock, _drill_falls])
 	print("autopilot: reached level %d, score %d, %d deaths, %d rounds cleared"
 		% [_game._level, _game._score, _deaths, _levels_cleared])
@@ -200,4 +206,12 @@ func _report() -> void:
 	else:
 		printerr("autopilot: FAIL (levels cleared %d, deaths %d, restart ok %s)"
 			% [_levels_cleared, _deaths, _restart_ok])
+
+	# Free the game and let a frame pass before quitting. Quitting with live
+	# tweens and scene-tree timers makes Godot print ObjectDB leak warnings at
+	# exit, which look alarming in CI even though nothing is actually wrong.
+	_game.queue_free()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
 	get_tree().quit(0 if ok else 1)

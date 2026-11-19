@@ -27,8 +27,10 @@ const ROWS := 7
 const HOP_TIME := 0.22
 const HOP_HEIGHT := 1.05
 const ENEMY_HOP_TIME := 0.30
-## Height of a tile's walkable surface. Mirrors BoardTile.TOP for the cube mesh.
-const TILE_TOP := 0.425
+## Height of a tile's walkable surface. Mirrors BoardTile.TOP, which is the
+## body's top face plus the cap's lip; the constant is duplicated rather than
+## referenced so this file parses without the global class cache.
+const TILE_TOP := 0.50
 const SAVE_PATH := "user://voxel_qbert.cfg"
 
 var _phase: int = Phase.READY
@@ -57,6 +59,9 @@ var _stage: Node3D
 var _player: Player
 var _player_coord := Vector3i.ZERO
 var _player_busy := false
+## The tween currently moving the player. Death must be able to stop it, or the
+## body keeps sliding towards the cube it never reached while it shrinks.
+var _player_tween: Tween
 var _buffered_dir := Vector3i.ZERO
 var _has_buffered := false
 
@@ -102,34 +107,15 @@ func _enter_ready() -> void:
 
 ## Static scene dressing. The board and the characters are built later, per
 ## level, so this only has to happen once.
+##
+## The look is three cheap layers stacked: a sky gradient so the void has depth,
+## a raking warm key light with real shadows so cubes sit on each other, and a
+## pool of additive light underneath so the pyramid floats in something rather
+## than on nothing. Glow and ambient occlusion do the rest.
 func _build_world() -> void:
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color("07070f")
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("9fb3d9")
-	env.ambient_light_energy = 0.85
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	var world_env := WorldEnvironment.new()
-	world_env.environment = env
-	add_child(world_env)
-
-	# Key light from up-left behind the camera, fill from the opposite side.
-	# Two directional lights and no shadows: face shading is baked into the
-	# voxel vertex colours and the tiles are flat, so shadows would cost frames
-	# to draw darkness onto darkness.
-	var key := DirectionalLight3D.new()
-	key.rotation_degrees = Vector3(-52, -42, 0)
-	key.light_energy = 1.15
-	key.shadow_enabled = false
-	add_child(key)
-
-	var fill := DirectionalLight3D.new()
-	fill.rotation_degrees = Vector3(-18, 138, 0)
-	fill.light_energy = 0.35
-	fill.light_color = Color("7f9fd9")
-	fill.shadow_enabled = false
-	add_child(fill)
+	add_child(_make_world_environment())
+	_add_vignette()
+	_add_lights()
 
 	_stage = Node3D.new()
 	_stage.name = "Stage"
@@ -143,6 +129,9 @@ func _build_world() -> void:
 	_entity_root = Node3D.new()
 	_entity_root.name = "Entities"
 	_stage.add_child(_entity_root)
+
+	_add_ground_plate()
+	_add_dust()
 
 	# Orthographic camera on the classic Q*bert diagonal: equal x/z puts the
 	# camera on a 45-degree azimuth, and y is chosen so it looks down at 30
@@ -161,6 +150,153 @@ func _build_world() -> void:
 	add_child(_camera)
 	_camera.look_at(target)
 	_camera.current = true
+
+
+## Sky, tone mapping and the two post effects that sell the voxel look:
+## glow (finished cubes bloom) and ambient occlusion (the gutters between cubes
+## darken instead of reading as flat black lines).
+func _make_world_environment() -> WorldEnvironment:
+	var sky_material := ShaderMaterial.new()
+	sky_material.shader = load("res://scripts/sky_gradient.gdshader")
+
+	var sky := Sky.new()
+	sky.sky_material = sky_material
+
+	var env := Environment.new()
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color("9fb0ff")
+	env.ambient_light_energy = 0.35
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_exposure = 1.05
+
+	env.glow_enabled = true
+	env.glow_intensity = 0.35
+	env.glow_strength = 1.1
+	env.glow_bloom = 0.05
+	env.glow_hdr_threshold = 1.0
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
+
+	# SSAO stays off. Measured on this scene (tests/tmp/speckle during the art
+	# pass): AO raises the luminance standard deviation of a flat cube top from
+	# 0.002 to 0.014 at a 30-degree camera angle, which reads as grain, and the
+	# shapes it would reveal are already separated by the body/cap value split.
+	env.ssao_enabled = false
+
+	# No fog. In an orthographic scene everything is at the same depth, so fog
+	# only washes the sky toward a flat grey (measured: a violet gradient turns
+	# into #848d9b) and mutes the cube colours for no depth gain.
+	env.fog_enabled = false
+
+	var world_env := WorldEnvironment.new()
+	world_env.environment = env
+	return world_env
+
+
+## Warm key light raking from the upper left, a cool rim from behind, and a dim
+## violet bounce from below. With shadows on, each cube drops a real shadow onto
+## its neighbours and the characters cast onto the cubes they stand on - that
+## contact shadow is most of what makes the board feel solid.
+func _add_lights() -> void:
+	var key := DirectionalLight3D.new()
+	key.rotation_degrees = Vector3(-52, -34, 0)
+	key.light_color = Color("ffe3c4")
+	key.light_energy = 2.4
+	key.shadow_enabled = true
+	key.light_angular_distance = 0.35
+	key.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	key.directional_shadow_max_distance = 45.0
+	key.shadow_bias = 0.02
+	key.shadow_normal_bias = 0.8
+	add_child(key)
+
+	var rim := DirectionalLight3D.new()
+	rim.rotation_degrees = Vector3(-14, 152, 0)
+	rim.light_color = Color("6fd6ff")
+	rim.light_energy = 0.45
+	rim.shadow_enabled = false
+	add_child(rim)
+
+	var bounce := DirectionalLight3D.new()
+	bounce.rotation_degrees = Vector3(-118, 20, 0)
+	bounce.light_color = Color("8a63ff")
+	bounce.light_energy = 0.18
+	bounce.shadow_enabled = false
+	add_child(bounce)
+
+
+## A dark plate under the pyramid. This is the shadow receiver: without it every
+## shadow the key light casts lands on nothing, and the board looks like a
+## diagram. It sits far enough below the cubes that a player falling off the edge
+## drops past it into darkness rather than through it (see _player_falls()).
+func _add_ground_plate() -> void:
+	var plate_mesh := CylinderMesh.new()
+	plate_mesh.top_radius = 9.0
+	plate_mesh.bottom_radius = 7.6
+	plate_mesh.height = 0.5
+	plate_mesh.radial_segments = 64
+	plate_mesh.rings = 1
+
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("120e20")
+	material.roughness = 1.0
+	material.metallic = 0.0
+
+	var plate := MeshInstance3D.new()
+	plate.mesh = plate_mesh
+	plate.material_override = material
+	plate.position = Vector3(0.0, -2.6, 1.0)
+	plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_stage.add_child(plate)
+
+
+## Slow motes drifting above the board. Purely atmospheric, but a few moving
+## points of light in an otherwise still frame is what stops the scene from
+## looking like a screenshot of a screenshot.
+func _add_dust() -> void:
+	var particle_mesh := BoxMesh.new()
+	particle_mesh.size = Vector3(0.05, 0.05, 0.05)
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color("b9a6ff")
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color.a = 0.55
+	material.vertex_color_use_as_albedo = false
+
+	var dust := CPUParticles3D.new()
+	dust.amount = 70
+	dust.lifetime = 9.0
+	dust.preprocess = 6.0
+	dust.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	dust.emission_box_extents = Vector3(9.0, 3.5, 9.0)
+	dust.direction = Vector3(0, 1, 0)
+	dust.spread = 40.0
+	dust.gravity = Vector3(0, 0.05, 0)
+	dust.initial_velocity_min = 0.05
+	dust.initial_velocity_max = 0.3
+	dust.scale_amount_min = 0.4
+	dust.scale_amount_max = 1.4
+	dust.mesh = particle_mesh
+	dust.material_override = material
+	dust.position = Vector3(0.0, 1.2, 1.0)
+	dust.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_stage.add_child(dust)
+
+
+## Corner darkening, below the HUD. See scripts/vignette.gdshader.
+func _add_vignette() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 0
+	var rect := ColorRect.new()
+	rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var material := ShaderMaterial.new()
+	material.shader = load("res://scripts/vignette.gdshader")
+	rect.material = material
+	layer.add_child(rect)
+	add_child(layer)
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +333,7 @@ func _build_discs() -> void:
 	for coord in Board.disc_coords():
 		var disc := MeshInstance3D.new()
 		disc.mesh = VoxelModels.disc()
-		disc.material_override = VoxelBuilder.make_material()
+		disc.material_override = VoxelBuilder.make_material(true)
 		# Sits a little above the cube tops so it reads as floating.
 		disc.position = Board.world_pos(coord, ROWS) + Vector3(0, 0.30, 0)
 		_entity_root.add_child(disc)
@@ -316,9 +452,13 @@ func _spawn_enemy(kind: String) -> void:
 	enemy.setup(kind, start, _enemy_interval(kind))
 	_entity_root.add_child(enemy)
 	enemy.drop_in(_tile_top(start), 0.05)
-	# busy until the drop finishes, otherwise it starts hopping out of the sky
+	# busy until the drop finishes, otherwise it starts hopping out of the sky.
+	# The guard matters: a player can squash a ball during its 0.45 s drop, and
+	# the timer would then write `busy` on a freed object.
 	enemy.busy = true
-	get_tree().create_timer(0.5).timeout.connect(func(): enemy.busy = false)
+	get_tree().create_timer(0.5).timeout.connect(func():
+		if is_instance_valid(enemy):
+			enemy.busy = false)
 	_enemies.append(enemy)
 
 
@@ -358,7 +498,7 @@ func _enemy_hop(enemy: HopEnemy) -> void:
 		var downs := _descend_options(enemy.coord)
 		if downs.is_empty():
 			enemy.hatch()
-			enemy.interval = maxf(0.55, enemy.interval * 0.8)
+			enemy.interval = maxf(0.28, enemy.interval * 0.8)
 			_synth.play("hatch")
 			return
 		_move_enemy(enemy, downs.pick_random())
@@ -406,7 +546,7 @@ func _move_enemy(enemy: HopEnemy, target: Vector3i) -> void:
 
 
 func _on_enemy_landed(enemy: HopEnemy) -> void:
-	if not enemy.alive:
+	if not enemy.alive or _phase != Phase.PLAYING:
 		return
 
 	# Slick undoes progress: this is the enemy that punishes a player who
@@ -417,7 +557,10 @@ func _on_enemy_landed(enemy: HopEnemy) -> void:
 			tile.revert()
 			_synth.play("revert")
 
-	if _phase != Phase.PLAYING:
+	# A player in the air has already left this cube: their coordinate only
+	# updates on landing, so comparing against it mid-hop would kill them for
+	# standing somewhere they are not.
+	if _player_busy:
 		return
 
 	# The egg is harmless; everything else kills on contact.
@@ -486,9 +629,11 @@ func _player_hop(dir: Vector3i) -> void:
 
 	var mover := func(t: float) -> void:
 		_player.position = Hop.arc(t, from, to, HOP_HEIGHT)
-	var tween := create_tween()
-	tween.tween_method(mover, 0.0, 1.0, HOP_TIME)
-	tween.finished.connect(func(): _player_landed(target))
+	if _player_tween != null and _player_tween.is_valid():
+		_player_tween.kill()
+	_player_tween = create_tween()
+	_player_tween.tween_method(mover, 0.0, 1.0, HOP_TIME)
+	_player_tween.finished.connect(func(): _player_landed(target))
 
 
 func _player_landed(target: Vector3i) -> void:
@@ -505,9 +650,11 @@ func _player_landed(target: Vector3i) -> void:
 		return
 
 	_player_coord = target
-	tile.step(_level)
+	# Points are for progress, not for hops: bouncing on a finished cube earns
+	# nothing, and level 3's wrap-round (2 -> 0) is not rewarded for undoing work.
+	if tile.step(_level):
+		_add_score(25)
 	_player.squash()
-	_add_score(25)
 	_synth.play("step")
 
 	_check_player_collision()
@@ -550,6 +697,9 @@ func _ride_disc(disc_coord: Vector3i) -> void:
 	# Take the player off the board immediately: during the ride there is no
 	# cube underneath, so enemies must not be able to "catch" them mid-air.
 	_player_coord = _apex
+	# A direction buffered during the hop onto the disc would fire the instant the
+	# ride ends - and from the apex, "up-left"/"up-right" is straight off the board.
+	_has_buffered = false
 	var from := _player.position
 	var to := _tile_top(_apex)
 	var rider := func(t: float) -> void:
@@ -557,10 +707,12 @@ func _ride_disc(disc_coord: Vector3i) -> void:
 	var tween := create_tween()
 	tween.tween_method(rider, 0.0, 1.0, 0.55)
 	tween.finished.connect(func():
+		if _phase != Phase.PLAYING:
+			_player_busy = false
+			return
 		_player.squash()
 		var apex_tile: BoardTile = _tiles.get(_apex)
-		if apex_tile != null:
-			apex_tile.step(_level)
+		if apex_tile != null and apex_tile.step(_level):
 			_add_score(25)
 		_check_player_collision()
 		if _phase == Phase.PLAYING:
@@ -571,16 +723,19 @@ func _ride_disc(disc_coord: Vector3i) -> void:
 
 
 func _player_falls() -> void:
+	_stop_player_motion()
 	_phase = Phase.DYING
 	_player_busy = false
 	_has_buffered = false
 	_synth.play("fall")
 	var from := _player.position
 	var faller := func(t: float) -> void:
-		# Accelerating drop with a tumble, no horizontal drift: the player
-		# missed the board, they should look like they fell off the edge.
-		_player.position = from + Vector3(0, -9.0 * t * t, 0)
+		# Accelerating drop with a tumble and no horizontal drift: the player
+		# missed the board, they should look like they fell off the edge. The
+		# drop stops short of the ground plate, and the shrink hides the rest.
+		_player.position = from + Vector3(0, -2.4 * t * t, 0)
 		_player.rotation.z = t * 2.2
+		_player.scale = Vector3.ONE * (1.0 - 0.75 * t)
 	var tween := create_tween()
 	tween.tween_method(faller, 0.0, 1.0, 0.85)
 	tween.finished.connect(_after_death)
@@ -591,11 +746,11 @@ func _player_falls() -> void:
 # ---------------------------------------------------------------------------
 
 func _check_player_collision() -> void:
-	if _phase != Phase.PLAYING:
+	if _phase != Phase.PLAYING or _player_busy:
 		return
 	for enemy in _enemies.duplicate():
 		var e := enemy as HopEnemy
-		if not e.alive or e.coord != _player_coord:
+		if not e.alive or e.busy or e.coord != _player_coord:
 			continue
 		if e.kind == HopEnemy.KIND_COILY and not e.hatched:
 			continue  # an egg on your cube is harmless
@@ -610,6 +765,7 @@ func _check_player_collision() -> void:
 func _kill_player() -> void:
 	if _phase != Phase.PLAYING:
 		return
+	_stop_player_motion()
 	_phase = Phase.DYING
 	_player_busy = false
 	_has_buffered = false
@@ -618,6 +774,13 @@ func _kill_player() -> void:
 	tween.tween_property(_player, "scale", Vector3(1.4, 0.15, 1.4), 0.18)
 	tween.tween_property(_player, "scale", Vector3.ZERO, 0.22)
 	tween.finished.connect(_after_death)
+
+
+## Cancels the hop in flight. Called when a death starts, so nothing is still
+## moving the body while it is being shrunk into the floor.
+func _stop_player_motion() -> void:
+	if _player_tween != null and _player_tween.is_valid():
+		_player_tween.kill()
 
 
 func _after_death() -> void:
@@ -751,4 +914,5 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _phase == Phase.GAME_OVER:
 				_start_game()
 		KEY_ESCAPE:
+			_save_high_score()
 			get_tree().quit()

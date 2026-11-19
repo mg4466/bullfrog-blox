@@ -25,16 +25,20 @@ extends RefCounted
 ## result is one static ArrayMesh built once at startup, so plain SurfaceTool is
 ## both the smallest and the fastest option.
 
-## Cube corners, indexed 0..7 in (x, y, z) bits: x = bit 0, y = bit 1, z = bit 2.
-## Quad lists below are counter-clockwise seen from outside, which is Godot's
-## front-face winding.
+## Cube corners, indexed 0..7 as a bit field: bit 0 = x, bit 1 = y, bit 2 = z.
+## That is the same packing `_corner()` uses, so index 2 is (0,1,0) - not
+## (1,1,0). Getting this table out of sync with the packing produces quads that
+## are not even planar, which renders as shredded, inside-out models.
+##
+## Quad lists below run counter-clockwise seen from outside the cube, which is
+## Godot's front-face winding for a right-handed, y-up, -z-forward world.
 const FACE_DEFS := [
-	{"direction": Vector3i(1, 0, 0), "quad": [1, 2, 6, 5], "shade": 0.88},   # +x
-	{"direction": Vector3i(-1, 0, 0), "quad": [0, 4, 7, 3], "shade": 0.70},  # -x
-	{"direction": Vector3i(0, 1, 0), "quad": [3, 7, 6, 2], "shade": 1.00},   # +y (top)
+	{"direction": Vector3i(1, 0, 0), "quad": [1, 3, 7, 5], "shade": 0.88},   # +x
+	{"direction": Vector3i(-1, 0, 0), "quad": [0, 4, 6, 2], "shade": 0.70},  # -x
+	{"direction": Vector3i(0, 1, 0), "quad": [2, 6, 7, 3], "shade": 1.00},   # +y (top)
 	{"direction": Vector3i(0, -1, 0), "quad": [0, 1, 5, 4], "shade": 0.42},  # -y
-	{"direction": Vector3i(0, 0, 1), "quad": [4, 5, 6, 7], "shade": 0.82},   # +z
-	{"direction": Vector3i(0, 0, -1), "quad": [0, 3, 2, 1], "shade": 0.60},  # -z
+	{"direction": Vector3i(0, 0, 1), "quad": [4, 5, 7, 6], "shade": 0.82},   # +z
+	{"direction": Vector3i(0, 0, -1), "quad": [0, 2, 3, 1], "shade": 0.60},  # -z
 ]
 
 ## Builds a mesh from `voxels` (Vector3i -> Color).
@@ -85,7 +89,13 @@ static func build(voxels: Dictionary, voxel_size: float) -> ArrayMesh:
 			)
 			# A quad is two triangles. SurfaceTool has no implicit fan for
 			# PRIMITIVE_TRIANGLES, so the shared diagonal vertex is repeated.
-			for corner_index in [quad[0], quad[1], quad[2], quad[0], quad[2], quad[3]]:
+			#
+			# The order is reversed here on purpose: Godot treats clockwise
+			# triangles as front faces when seen from outside, which is the
+			# opposite of the right-hand-rule table above. Reversing at emission
+			# keeps the table in the orientation a human can check, and keeps
+			# the flip in exactly one place.
+			for corner_index in [quad[0], quad[2], quad[1], quad[0], quad[3], quad[2]]:
 				var corner := _corner(int(corner_index), cell, voxel_size, centre, floor_y)
 				st.set_color(lit)
 				st.set_normal(normal)
@@ -105,13 +115,23 @@ static func _corner(corner_index: int, cell: Vector3i, voxel_size: float,
 	return corner * voxel_size - Vector3(centre.x, floor_y, centre.z)
 
 
-## The material every voxel model shares. Vertex colour carries the albedo;
-## roughness is high because these are toys, not chrome.
-static func make_material() -> StandardMaterial3D:
+## The material every voxel model shares.
+##
+## Characters are unshaded on purpose. A physically-lit orange lit by a warm key
+## and a blue fill comes out beige: the red channel clips first and the tonemapper
+## desaturates the highlight, so a saturated character becomes a pastel blob.
+## The face shading is already baked into the vertex colours (top 1.0, sides
+## 0.88/0.82, undersides 0.6/0.42), so dropping the real lights keeps the palette
+## exactly as authored while still reading as a solid volume. They keep casting
+## shadows into the world, which is what actually grounds them.
+static func make_material(unshaded: bool = false) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.85
 	mat.metallic = 0.0
+	if unshaded:
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	else:
+		mat.roughness = 0.85
 	return mat
 
 

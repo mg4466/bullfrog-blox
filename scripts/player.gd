@@ -19,7 +19,7 @@ var _squash: Tween
 func _ready() -> void:
 	_model = MeshInstance3D.new()
 	_model.mesh = VoxelModels.player()
-	_model.material_override = VoxelBuilder.make_material()
+	_model.material_override = VoxelBuilder.make_material(true)
 	add_child(_model)
 
 
