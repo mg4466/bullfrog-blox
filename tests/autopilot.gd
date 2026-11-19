@@ -21,9 +21,12 @@ const BoardScript = preload("res://scripts/board.gd")
 const PHASE_PLAYING := 1
 const PHASE_GAME_OVER := 4
 
-## Where a fall is guaranteed: the base corner's only legal hop is up-left, so
-## hopping down-right from it walks straight off the board.
-const CLIFF_COORD := Vector3i(6, 0, 0)
+## Where a fall is guaranteed. A base-row cube is the edge of the board, so a
+## hop "downhill" from it has no cube to land on - and this pair is chosen so it
+## is not one of the two escape discs either, which would carry the player away
+## instead of dropping them.
+const CLIFF_COORD := Vector3i(3, 0, 3)
+const CLIFF_STEP := Vector3i(1, -1, 0)
 
 var _game: Node
 var _rng := RandomNumberGenerator.new()
@@ -159,7 +162,7 @@ func _death_drill() -> void:
 	_game._player.position = _game._tile_top(CLIFF_COORD)
 	_drill_falls += 1
 	print("autopilot: deliberate fall %d (lives before %d)" % [_drill_falls, _game._lives])
-	_game._request_hop(BoardScript.DOWN_RIGHT)
+	_game._request_hop(CLIFF_STEP)
 
 
 func _verify_restart() -> void:

@@ -63,6 +63,10 @@ var _has_buffered := false
 var _camera: Camera3D
 var _synth: Synth
 var _hud: Hud
+## Seconds until the "keep the board busy" spawner is allowed to add a ball.
+## Without it a patient player can clear a level with an empty board after the
+## first wave has fallen off, which is dull; the arcade never let you rest.
+var _trickle := 6.0
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +277,14 @@ func _process(delta: float) -> void:
 		return
 
 	_tick_spawns(delta)
+
+	# Trickle spawner: an empty board is boring, so keep one ball in play even
+	# after the opening wave has fallen off the bottom.
+	_trickle -= delta
+	if _trickle <= 0.0:
+		_trickle = 6.0
+		if _enemies.is_empty() and _spawn_queue.is_empty():
+			_spawn_enemy(HopEnemy.KIND_BALL)
 
 	for enemy in _enemies.duplicate():
 		var e := enemy as HopEnemy
@@ -680,6 +692,9 @@ func _check_level_clear() -> void:
 func _advance_level() -> void:
 	if _phase != Phase.CLEAR:
 		return
+	# Save here as well as at game over: a player who closes the window on a
+	# high score should still keep it.
+	_save_high_score()
 	_level += 1
 	_start_level()
 
