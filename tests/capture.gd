@@ -37,12 +37,40 @@ func _ready() -> void:
 	await get_tree().create_timer(0.8).timeout
 	await _save("title")
 
-	# Mid-round: some cubes flipped, enemies on the board.
+	# Mid-round: play a few hops so the board shows a mix of flipped and
+	# unflipped cubes (a screenshot of an untouched level says nothing about the
+	# game), then let an enemy or two arrive before shooting.
 	_game._start_game()
-	await get_tree().create_timer(3.4).timeout
+	await get_tree().create_timer(0.6).timeout
+	for i in range(24):
+		await get_tree().create_timer(0.26).timeout
+		var dir: Variant = _pick_hop()
+		if dir != null:
+			_game._request_hop(dir)
+	await get_tree().create_timer(0.45).timeout
 	await _save("board")
 
 	get_tree().quit(0)
+
+
+## A legal hop that prefers a cube needing work, so the screenshot shows
+## progress rather than the player bouncing on two tiles.
+func _pick_hop() -> Variant:
+	var coord: Vector3i = _game._player_coord
+	var useful: Array = []
+	var legal: Array = []
+	for dir in Board.DIRECTIONS:
+		var next: Vector3i = coord + dir
+		if not _game._tiles.has(next):
+			continue
+		legal.append(dir)
+		if not (_game._tiles[next] as BoardTile).is_complete():
+			useful.append(dir)
+	if not useful.is_empty():
+		return useful[0]
+	if not legal.is_empty():
+		return legal[0]
+	return null
 
 
 ## `await` is load-bearing: this function waits for the frame to actually be
